@@ -1,0 +1,94 @@
+#SCRIPT: This script will check Master-Slave Configuration#
+#AUTHOR: Arun Sangameswaran                                                  #
+#DATE: 1/1/2015                                           #
+###########################################################
+
+# O/P host status into a filei-slave.log#
+#Comment below 2 lines for testing scenarios - slave.log
+cmd="show slave status\G"
+mysql --user=root --password --host=localhost -e "$cmd" > /rhombl/test/slave.log
+
+#grep 'Master_Host' line and input into H#
+egrep '(^| )Master_Host(:|$)' /rhombl/test/slave.log > H
+#cat H
+
+#awk 2nd column 'hostname' into variable F#
+F=$(awk -F":" '{ print $2 }' H)
+#echo $F
+
+#Condition to check if Host is MASTER or SLAVE#
+if [ $F = $(hostname) ]; then
+               echo This host $(hostname) is MASTER
+else
+	       echo This host $(hostname) is SLAVE
+fi
+
+#If SLAVE check if REPLICATION works#
+if [ $F != $(hostname) ]; then
+read -p "Check Replication Status from MASTER HOST $F? " -n 1 -r
+if [[ $REPLY =~ ^[Yy]$ ]]; then
+#    printf "\nlogic\n"
+
+#grep 'Slave_IO_Running' line and input into H# note O/P appended to H #
+egrep '(^| )Slave_IO_Running(:|$)' /rhombl/test/slave.log >> H
+#cat H
+
+#awk 2nd column 'Status' into variable F# note 'Slave_IO' given so it grabs only relevant 2nd column
+F=$(awk -F":" '/Slave_IO/{ print $2 }' H)
+#echo $F
+
+#If Slave_IO_Running=YES;Check Slave_SQL_Running#
+if [ $F = Yes ]; then
+
+#grep 'Slave_SQL_Running' line and input into H# note O/P appended to H #
+egrep '(^| )Slave_SQL_Running(:|$)' /rhombl/test/slave.log >> H
+#cat H
+
+#awk 2nd column 'Status' into variable F# note 'Slave_SQL' given so it grabs only relevant 2nd column
+F=$(awk -F":" '/Slave_SQL/{ print $2 }' H)
+#echo $F
+
+#If Slave_SQL_Running=YES;Print Slave_IO_State#
+if [ $F = Yes ]; then
+
+#Print Sucess and AWK and print Slave_IO_State
+	printf "\nREPLICATION IS WORKING SUCCESSFULLY\n"
+F=$(awk -F":" '/Slave_IO_State/{ print $1,"--->"$2 }' /rhombl/test/slave.log)
+echo $F
+
+#Check current LAG Time#
+F=$(awk -F":" '/Seconds_Behind_Master/{ print "Current Lag Time -"$2,$1 }' /rhombl/test/slave.log)
+echo $F
+
+#grep 'Seconds_Behind_Master' line and input into H# note O/P appended to H #
+egrep '(^| )Seconds_Behind_Master(:|$)' /rhombl/test/slave.log >> H
+#cat H
+
+#awk 2nd column 'Status' into variable F# note 'Seconds_Behind' given so it grabs only relevant 2nd column
+F=$(awk -F":" '/Seconds_Behind/{ print $2 }' H)
+#echo $F
+
+#Email if Lag time >5 secs#
+if [ $F -gt 5 ]; then
+#	echo "SLAVE IS LAGGING MORE THEN 5 SECS BEHIND MASTER" | mailx -r "Arun.Sangameswaran@jci.com" -s "Slave Lag Error" "arun9s@gmail.com"
+	printf "\nEMAIL SENT\n"
+else
+	echo EMAIL NOT SENT
+fi
+
+else
+        printf "\n\e[1;31m RELICATION IS NOT WORKING!!\n"
+        printf "\n\e[1;31m CHECK 'SLAVE_SQL_RUNNING' ERRORS\n"
+OR=$PS1
+export PS1="\e[0;31m[\u@\h \W]\$ \e[m "
+fi
+else
+	printf "\n\e[1;31m RELICATION IS NOT WORKING!!\n"
+	printf "\n\e[1;31m CHECK 'SLAVE_IO_RUNNING' ERRORS\n"
+OR=$PS1
+export PS1="\e[0;31m[\u@\h \W]\$ \e[m "
+fi
+else
+    printf "\nGood Day!\n"
+fi
+fi
